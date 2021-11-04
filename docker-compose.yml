@@ -1,0 +1,46 @@
+version: '3'
+services:
+  backend:
+    build: ./dj_app
+    container_name: quiz_back
+    command: bash -c "python manage.py makemigrations && python manage.py migrate && gunicorn dj_app.wsgi -b 0.0.0.0:3001"
+    volumes:
+      - ./dj_app/media:/usr/src/app/media
+    depends_on: 
+      - quiz_db
+    networks:
+      - quiz_network
+  frontend:
+    build: ./quiz_react
+    container_name: quiz_front
+    command: serve -s build -l 3000
+    networks:
+      - quiz_network
+  nginx:
+    image: nginx:stable-alpine
+    container_name: quiz_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf.prod:/etc/nginx/conf.d/nginx.conf
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - quiz_network
+  quiz_db:
+    image: postgres:latest
+    container_name: quiz_db
+    environment:
+      - POSTGRES_DB=some
+      - POSTGRES_USER=some
+      - POSTGRES_PASSWORD=sa2jbhfOFBoO01251k1sa12nn!
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - quiz_network
+
+networks:
+  quiz_network:

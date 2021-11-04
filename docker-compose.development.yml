@@ -1,0 +1,17 @@
+version: '3'
+services:
+  backend:
+    volumes:
+      - ./dj_app/quiz:/usr/src/app/quiz
+      - ./dj_app/users:/usr/src/app/users
+      - ./dj_app/dj_app:/usr/src/app/dj_app
+      - ./dj_app/media:/usr/src/app/media
+  frontend:
+    command: npm run start
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./quiz_react/src:/usr/src/app/src
+  nginx:
+    volumes:
+      - ./nginx/nginx.conf.dev:/etc/nginx/conf.d/nginx.conf
