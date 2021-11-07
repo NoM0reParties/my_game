@@ -37,4 +37,12 @@ urlpatterns = [
     path('wrong_answer_super', views.wrong_answer_super, name='wrong_answer_super'),
     path('get_answers', views.get_answers, name='get_answers'),
     path('end_game', views.end_game, name='end_game'),
+    path('results_table', views.results_table, name='results_table'),
+    path('nobody', views.nobody, name='nobody'),
+    path('update_quiz/<int:id>', views.update_quiz, name='update_quiz'),
+    path('update_theme/<int:id>', views.update_theme, name='update_theme'),
+    path('update_question/<int:id>', views.update_question, name='update_question'),
+    path('quiz_upd_detail', views.quiz_upd_detail, name='quiz_upd_detail'),
+    path('theme_upd_detail', views.theme_upd_detail, name='theme_upd_detail'),
+    path('question_upd_detail', views.question_upd_detail, name='question_upd_detail'),
 ]

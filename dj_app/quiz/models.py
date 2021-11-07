@@ -27,6 +27,8 @@ class Participant(models.Model):
     active = models.BooleanField(default=True)
     super_bet = models.PositiveSmallIntegerField(null=True, blank=True)
     super_answer = models.CharField(max_length=128, null=True, blank=True)
+    answer_attempts = models.PositiveSmallIntegerField(default=0)
+    correct_answers = models.PositiveSmallIntegerField(default=0)
 
 
 class QuizGame(models.Model):

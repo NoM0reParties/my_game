@@ -122,30 +122,79 @@ def create_theme(request):
 @login_required
 def create_question(request):
     check_method(request, ['POST'])
+    theme = QuestionCategory.objects.prefetch_related('questions').get(id=request.POST['theme'])
+    values = list()
+    for q in theme.questions.all():
+        values.append(q.value)
+    new_value = 0
+    for value in range(500, 0, -100):
+        if value not in values:
+            new_value = value
     question = Question.objects.create(text=request.POST['text'], category_id=int(request.POST['theme']),
-                                       type_id=int(request.POST['type']), value=int(request.POST['value']),
+                                       type_id=int(request.POST['type']), value=new_value,
                                        image=request.FILES['image'] if 'image' in request.FILES else None,
                                        audio=request.FILES['audio'] if 'audio' in request.FILES else None)
     return JsonResponse({"id": question.id}, status=201)
 
 
 @login_required
-def update_quiz(request):
+def update_quiz(request, id: int):
     check_method(request, ['PUT', 'DELETE'])
-    data = json.loads(request.body)
-    quiz = Quiz.objects.get(id=data['quiz_id'])
+    quiz = Quiz.objects.get(id=id)
     update_fields = list()
     if request.method == 'PUT':
+        data = json.loads(request.body)
         if 'title' in data:
             update_fields.append('title')
             quiz.title = data['title']
         if 'section' in data:
             update_fields.append('section')
-            quiz.section = Section.objects.get(id=data['title'])
+            quiz.section = Section.objects.get(id=data['section'])
         quiz.save(update_fields=update_fields)
     elif request.method == 'DELETE':
         quiz.delete()
     return HttpResponse(status=200 if request.method == 'PUT' else 204)
+
+
+@login_required
+def update_theme(request, id: int):
+    check_method(request, ['PUT', 'DELETE'])
+    theme = QuestionCategory.objects.get(id=id)
+    update_fields = list()
+    if request.method == 'PUT':
+        data = json.loads(request.body)
+        if 'name' in data:
+            update_fields.append('name')
+            theme.name = data['name']
+        theme.save(update_fields=update_fields)
+    elif request.method == 'DELETE':
+        theme.delete()
+    return HttpResponse(status=200 if request.method == 'PUT' else 204)
+
+
+@login_required
+def update_question(request, id: int):
+    check_method(request, ['POST', 'DELETE'])
+    question = Question.objects.get(id=id)
+    update_fields = list()
+    if request.method == 'POST':
+        print(request.POST)
+        if 'text' in request.POST:
+            update_fields.append('text')
+            question.text = request.POST['text']
+        if 'audio' in request.FILES:
+            update_fields.append('audio')
+            question.audio = request.FILES['audio']
+        if 'type' in request.POST:
+            update_fields.append('type')
+            question.type_id = int(request.POST['type'])
+        if 'image' in request.FILES:
+            update_fields.append('image')
+            question.image = request.FILES['image']
+        question.save(update_fields=update_fields)
+    elif request.method == 'DELETE':
+        question.delete()
+    return HttpResponse(status=200 if request.method == 'POST' else 204)
 
 
 @login_required
@@ -268,9 +317,11 @@ def corr_answer(request):
     points = question.category.round * question.value
     player.score += points
     player.ready = False
+    player.answer_attempts += 1
+    player.correct_answers += 1
     question.fresh = False
     player.answer_time = None
-    player.save(update_fields=['score', 'ready', 'answer_time'])
+    player.save(update_fields=['score', 'ready', 'answer_time', 'answer_attempts', 'correct_answers'])
     question.save(update_fields=['fresh'])
     calm_down_players(game)
     return HttpResponse(status=200)
@@ -286,8 +337,9 @@ def wrong_answer(request):
     points = question.category.round * question.value
     player.score -= points
     player.ready = False
+    player.answer_attempts += 1
     player.answer_time = None
-    player.save(update_fields=['score', 'ready', 'answer_time'])
+    player.save(update_fields=['score', 'ready', 'answer_time', 'answer_attempts'])
     for participant in game.participants.all().order_by('answer_time'):
         print(participant.answer_time)
         if participant.ready:
@@ -302,8 +354,10 @@ def corr_answer_super(request):
     player = Participant.objects.get(id=data['player_id'])
     player.score += player.super_bet
     player.ready = False
+    player.answer_attempts += 1
+    player.correct_answers += 1
     player.answer_time = None
-    player.save(update_fields=['score', 'ready', 'answer_time'])
+    player.save(update_fields=['score', 'ready', 'answer_time', 'answer_attempts', 'correct_answers'])
     return HttpResponse(status=200)
 
 
@@ -315,7 +369,8 @@ def wrong_answer_super(request):
     player.score -= player.super_bet
     player.ready = False
     player.answer_time = None
-    player.save(update_fields=['score', 'ready', 'answer_time'])
+    player.answer_attempts += 1
+    player.save(update_fields=['score', 'ready', 'answer_time', 'answer_attempts'])
     return HttpResponse(status=200)
 
 
@@ -424,6 +479,19 @@ def answer_super(request):
 
 
 @login_required
+def results_table(request):
+    check_method(request, ['GET'])
+    game_id = request.GET.get('quiz_game_id')
+    quiz_game = QuizGame.objects.prefetch_related('participants', 'participants__user').get(id=game_id)
+    result = list()
+    for p in quiz_game.participants.all().order_by('-score'):
+        percent = p.correct_answers / p.answer_attempts * 100
+        result.append({"id": p.id, "name": p.user.username, "score": p.score,
+                       "percent": f'{int(percent)} %'})
+    return JsonResponse(result, safe=False)
+
+
+@login_required
 def end_game(request):
     check_method(request, ['POST'])
     data = json.loads(request.body)
@@ -431,6 +499,37 @@ def end_game(request):
     q_set = game.participants.all()
     for p in q_set:
         p.active = False
-    Participant.objects.bulk_update(q_set, ['answer_time', 'ready'])
+    Participant.objects.bulk_update(q_set, ['active'])
     game.quiz.delete()
     return HttpResponse(status=200)
+
+
+@login_required
+def nobody(request):
+    check_method(request, ['POST'])
+    data = json.loads(request.body)
+    question = InGameQuestion.objects.get(id=data['question_id'])
+    question.fresh = False
+    question.save(update_fields=['fresh'])
+    return HttpResponse(status=200)
+
+
+@login_required
+def question_upd_detail(request):
+    check_method(request, ['GET'])
+    question = Question.objects.select_related('type').get(id=request.GET.get("question_id"))
+    return JsonResponse({"text": question.text, "type": question.type.id})
+
+
+@login_required
+def theme_upd_detail(request):
+    check_method(request, ['GET'])
+    theme = QuestionCategory.objects.get(id=request.GET.get("theme_id"))
+    return JsonResponse({"name": theme.name})
+
+
+@login_required
+def quiz_upd_detail(request):
+    check_method(request, ['GET'])
+    quiz = Quiz.objects.select_related('section').get(id=request.GET.get("quiz_id"))
+    return JsonResponse({"title": quiz.title, "section": quiz.section.id })

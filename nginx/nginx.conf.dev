@@ -2,6 +2,8 @@ server {
     listen 80;
 
     server_name 192.168.50.233;
+    
+    client_max_body_size 10M;
 
     location / {
         proxy_pass http://frontend:3000;
@@ -21,6 +23,8 @@ server {
     listen 80;
 
     server_name quiz-game.local;
+    
+    client_max_body_size 10M;
 
     location / {
         proxy_pass http://frontend:3000;
