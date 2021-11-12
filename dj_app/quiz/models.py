@@ -1,7 +1,14 @@
+import random
+import string
+
 from django.db import models
 
 from users.models import CustomUser
 
+
+def get_code(length):
+    code = ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+    return code
 
 class Section(models.Model):
     name = models.CharField(max_length=64, verbose_name='название тематической секции')
@@ -19,27 +26,26 @@ class Quiz(models.Model):
     completed = models.BooleanField(default=False)
 
 
-class Participant(models.Model):
-    user = models.ForeignKey(CustomUser, verbose_name='создатель', on_delete=models.CASCADE)
-    score = models.IntegerField(default=0)
-    ready = models.BooleanField(default=False)
-    answer_time = models.DateTimeField(null=True, blank=True)
-    active = models.BooleanField(default=True)
-    super_bet = models.PositiveSmallIntegerField(null=True, blank=True)
-    super_answer = models.CharField(max_length=128, null=True, blank=True)
-    answer_attempts = models.PositiveSmallIntegerField(default=0)
-    correct_answers = models.PositiveSmallIntegerField(default=0)
-
-
 class QuizGame(models.Model):
     name = models.CharField(max_length=64, verbose_name='название игры')
-    participants = models.ManyToManyField(Participant, verbose_name='участники игры')
-    quiz = models.ForeignKey(Quiz, verbose_name='квиз для игры', related_name='quiz_game', on_delete=models.SET_NULL, null=True, blank=True)
+    quiz = models.ForeignKey(Quiz, verbose_name='квиз для игры', related_name='quiz_game', on_delete=models.CASCADE, null=True, blank=True)
     timer = models.BooleanField(default=False, verbose_name='игра с таймером')
     current_round = models.PositiveSmallIntegerField(default=1, verbose_name='текущий раунд')
     game_master = models.ForeignKey(CustomUser, verbose_name='ведущий', on_delete=models.CASCADE, related_name='games',
                                     null=True)
     started = models.BooleanField(default=False, verbose_name='стартовала ли игра')
+    room_name = models.CharField(max_length=32, default=get_code(30))
+
+
+class Participant(models.Model):
+    user = models.ForeignKey(CustomUser, verbose_name='создатель', on_delete=models.CASCADE)
+    score = models.IntegerField(default=0)
+    game = models.ForeignKey(QuizGame, related_name='participants', on_delete=models.SET_NULL, null=True, blank=True)
+    active = models.BooleanField(default=True)
+    super_bet = models.PositiveSmallIntegerField(null=True, blank=True)
+    super_answer = models.CharField(max_length=128, null=True, blank=True)
+    answer_attempts = models.PositiveSmallIntegerField(default=0)
+    correct_answers = models.PositiveSmallIntegerField(default=0)
 
 
 class QuestionCategory(models.Model):

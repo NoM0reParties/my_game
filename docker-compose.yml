@@ -3,11 +3,14 @@ services:
   backend:
     build: ./dj_app
     container_name: quiz_back
-    command: bash -c "python manage.py makemigrations && python manage.py migrate && gunicorn dj_app.wsgi -b 0.0.0.0:3001"
+    command: bash -c "python manage.py makemigrations && python manage.py migrate && daphne -b 0.0.0.0 -p 3001 dj_app.asgi:application"
     volumes:
       - ./dj_app/media:/usr/src/app/media
     depends_on: 
+      - redis-server
       - quiz_db
+    ports:
+      - "3001:3001"
     networks:
       - quiz_network
   frontend:
@@ -41,6 +44,14 @@ services:
       - "5432:5432"
     networks:
       - quiz_network
+  redis-server:
+    image: "redis:alpine"
+    command: redis-server
+    ports:
+      - "6379:6379"
+    networks:
+      - quiz_network
 
 networks:
   quiz_network:
+

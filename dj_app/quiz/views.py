@@ -1,19 +1,9 @@
-import datetime
 import json
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 
-# Create your views here.
 from quiz.models import Section, Quiz, QuestionType, QuestionCategory, Question, QuizGame, InGameQuestion, Participant
-
-
-def calm_down_players(game: QuizGame):
-    q_set = game.participants.all()
-    for participant in q_set:
-        participant.answer_time = None
-        participant.ready = False
-    Participant.objects.bulk_update(q_set, ['answer_time', 'ready'])
 
 
 def check_method(request, expected: list) -> HttpResponse:
@@ -46,7 +36,8 @@ def quiz_list(request):
 def game_quiz_list(request):
     check_method(request, ['GET'])
     return JsonResponse([{"id": quiz.id, "name": quiz.title, "color": quiz.section.special_color} for quiz in
-                         Quiz.objects.filter(creator__isnull=False, completed=True).select_related('section')], safe=False)
+                         Quiz.objects.filter(creator__isnull=False, completed=True).select_related('section')],
+                        safe=False)
 
 
 @login_required
@@ -89,8 +80,6 @@ def question_detail(request):
 @login_required
 def ig_question_detail(request):
     check_method(request, ['GET'])
-    game_id = request.GET.get('game_id')
-    calm_down_players(QuizGame.objects.get(id=game_id))
     question_id = request.GET.get('question_id')
     question = InGameQuestion.objects.get(id=question_id)
     resp = {"text": question.text, "value": question.value, "type": question.type_id}
@@ -311,19 +300,15 @@ def round_completed(request):
 def corr_answer(request):
     check_method(request, ['POST'])
     data = json.loads(request.body)
-    player = Participant.objects.get(id=data['player_id'])
-    game = QuizGame.objects.prefetch_related('participants').get(id=data['game_id'])
+    player = Participant.objects.get(user_id=data['player_id'], active=True)
     question = InGameQuestion.objects.prefetch_related('category').get(id=data['question_id'])
     points = question.category.round * question.value
     player.score += points
-    player.ready = False
     player.answer_attempts += 1
     player.correct_answers += 1
     question.fresh = False
-    player.answer_time = None
-    player.save(update_fields=['score', 'ready', 'answer_time', 'answer_attempts', 'correct_answers'])
+    player.save(update_fields=['score', 'answer_attempts', 'correct_answers'])
     question.save(update_fields=['fresh'])
-    calm_down_players(game)
     return HttpResponse(status=200)
 
 
@@ -331,19 +316,12 @@ def corr_answer(request):
 def wrong_answer(request):
     check_method(request, ['POST'])
     data = json.loads(request.body)
-    player = Participant.objects.get(id=data['player_id'])
-    game = QuizGame.objects.prefetch_related('participants').get(id=data['game_id'])
+    player = Participant.objects.get(user_id=data['player_id'], active=True)
     question = InGameQuestion.objects.prefetch_related('category').get(id=data['question_id'])
     points = question.category.round * question.value
     player.score -= points
-    player.ready = False
     player.answer_attempts += 1
-    player.answer_time = None
-    player.save(update_fields=['score', 'ready', 'answer_time', 'answer_attempts'])
-    for participant in game.participants.all().order_by('answer_time'):
-        print(participant.answer_time)
-        if participant.ready:
-            return JsonResponse({"id": participant.id, "name": participant.user.username})
+    player.save(update_fields=['score', 'answer_attempts'])
     return HttpResponse(status=200)
 
 
@@ -351,13 +329,11 @@ def wrong_answer(request):
 def corr_answer_super(request):
     check_method(request, ['POST'])
     data = json.loads(request.body)
-    player = Participant.objects.get(id=data['player_id'])
+    player = Participant.objects.get(id=data['player_id'], active=True)
     player.score += player.super_bet
-    player.ready = False
     player.answer_attempts += 1
     player.correct_answers += 1
-    player.answer_time = None
-    player.save(update_fields=['score', 'ready', 'answer_time', 'answer_attempts', 'correct_answers'])
+    player.save(update_fields=['score', 'answer_attempts', 'correct_answers'])
     return HttpResponse(status=200)
 
 
@@ -365,22 +341,10 @@ def corr_answer_super(request):
 def wrong_answer_super(request):
     check_method(request, ['POST'])
     data = json.loads(request.body)
-    player = Participant.objects.get(id=data['player_id'])
+    player = Participant.objects.get(id=data['player_id'], active=True)
     player.score -= player.super_bet
-    player.ready = False
-    player.answer_time = None
     player.answer_attempts += 1
-    player.save(update_fields=['score', 'ready', 'answer_time', 'answer_attempts'])
-    return HttpResponse(status=200)
-
-
-@login_required
-def player_ready(request):
-    check_method(request, ['POST'])
-    participant = Participant.objects.get(user=request.user, active=True)
-    participant.ready = True
-    participant.answer_time = datetime.datetime.now()
-    participant.save(update_fields=['ready', 'answer_time'])
+    player.save(update_fields=['score', 'answer_attempts'])
     return HttpResponse(status=200)
 
 
@@ -389,18 +353,8 @@ def start_game(request):
     check_method(request, ['POST'])
     data = json.loads(request.body)
     game = QuizGame.objects.get(id=data['game_id'])
-    game.started=True
+    game.started = True
     game.save(update_fields=['started'])
-    return HttpResponse(status=200)
-
-
-@login_required
-def check_ready_players(request):
-    check_method(request, ['GET'])
-    quiz_game_id = request.GET.get('quiz_game_id')
-    game = QuizGame.objects.get(id=quiz_game_id)
-    for p in game.participants.filter(ready=True).order_by('answer_time'):
-        return JsonResponse({"id": p.id, "name": p.user.username, "score": p.score})
     return HttpResponse(status=200)
 
 
@@ -418,7 +372,8 @@ def players_dashboard(request):
     check_method(request, ['GET'])
     quiz_game_id = request.GET.get('quiz_game_id')
     quiz_game = QuizGame.objects.prefetch_related('participants', 'participants__user').get(id=quiz_game_id)
-    return JsonResponse([{"id": p.id, "name": p.user.username, "score": p.score} for p in quiz_game.participants.all().order_by('-score')], safe=False)
+    return JsonResponse([{"id": p.id, "name": p.user.username, "score": p.score} for p in
+                         quiz_game.participants.all().order_by('-score')], safe=False)
 
 
 @login_required
@@ -429,22 +384,18 @@ def get_answers(request):
     question = InGameQuestion.objects.get(id=q_id)
     quiz_game = QuizGame.objects.prefetch_related('participants', 'participants__user').get(id=quiz_game_id)
     result = list()
-    all_ready = True
     for p in quiz_game.participants.all().order_by('-score'):
-        if p.score > 0:
-            if p.ready:
-                result.append({"id": p.id, "name": p.user.username, "answer": p.super_answer, "bet": p.super_bet} )
-            else:
-                return JsonResponse({"answers": {}, "ready": False})
-    question.fresh = False
+        if not p.super_bet or not p.super_answer:
+            return JsonResponse({"ready": False})
     question.save(update_fields=['fresh'])
-    return JsonResponse({"answers": result, "ready": all_ready})
+    return JsonResponse({"answers": result, "ready": True})
 
 
 @login_required
 def games_available(request):
     check_method(request, ['GET'])
-    return JsonResponse([{"id": g.id, "name": g.name} for g in QuizGame.objects.filter(started=False)], safe=False)
+    return JsonResponse(
+        [{"id": g.id, "name": g.name, "room": g.room_name} for g in QuizGame.objects.filter(started=False)], safe=False)
 
 
 @login_required
@@ -452,8 +403,7 @@ def connect(request):
     check_method(request, ['POST'])
     data = json.loads(request.body)
     game = QuizGame.objects.get(id=data['game_id'])
-    participant = Participant.objects.create(user=request.user)
-    game.participants.add(participant)
+    Participant.objects.create(user=request.user, game=game)
     return HttpResponse(status=200)
 
 
@@ -473,8 +423,7 @@ def answer_super(request):
     data = json.loads(request.body)
     participant = Participant.objects.get(user=request.user, active=True)
     participant.super_answer = data["answer"]
-    participant.ready = True
-    participant.save(update_fields=['super_answer', 'ready'])
+    participant.save(update_fields=['super_answer'])
     return HttpResponse(status=200)
 
 
@@ -532,4 +481,16 @@ def theme_upd_detail(request):
 def quiz_upd_detail(request):
     check_method(request, ['GET'])
     quiz = Quiz.objects.select_related('section').get(id=request.GET.get("quiz_id"))
-    return JsonResponse({"title": quiz.title, "section": quiz.section.id })
+    return JsonResponse({"title": quiz.title, "section": quiz.section.id})
+
+
+@login_required
+def room(request):
+    check_method(request, ['GET'])
+    role = request.GET.get('role')
+    if role == 'creator':
+        game = QuizGame.objects.get(game_master=request.user)
+        return JsonResponse({"room": game.room_name})
+    else:
+        player = Participant.objects.get(user=request.user, active=True)
+        return JsonResponse({"room": player.game.room_name})
