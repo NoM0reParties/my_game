@@ -34,7 +34,7 @@ class QuizGame(models.Model):
     game_master = models.ForeignKey(CustomUser, verbose_name='ведущий', on_delete=models.CASCADE, related_name='games',
                                     null=True)
     started = models.BooleanField(default=False, verbose_name='стартовала ли игра')
-    room_name = models.CharField(max_length=32, default=get_code(30))
+    room_name = models.CharField(max_length=32, default='test')
 
 
 class Participant(models.Model):
