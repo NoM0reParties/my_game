@@ -5,7 +5,7 @@ from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 from django.http import HttpRequest
 
-from quiz.models import Section, Quiz, QuestionCategory, Question, InGameQuestion, QuizGame
+from quiz.models import Section, Quiz, QuestionCategory, Question, InGameQuestion, QuizGame, Participant, QuestionType
 
 
 def _get_user(request: HttpRequest) -> User:
@@ -43,7 +43,7 @@ def _get_game_quiz_list() -> list:
 
 
 async def get_game_quiz_list() -> Coroutine:
-    return await sync_to_async(_get_quiz_list)()
+    return await sync_to_async(_get_game_quiz_list)()
 
 
 def _get_themes(id: int) -> list:
@@ -278,3 +278,263 @@ def _value_change(data: dict) -> None:
 
 async def value_change(data: dict) -> Coroutine:
     return await sync_to_async(_value_change)(data)
+
+
+def _round_qg(quiz_game_id: int, round: int) -> dict:
+    quiz_game = QuizGame.objects.prefetch_related('quiz', 'quiz__q_category', 'quiz__q_category__question').get(
+        id=quiz_game_id)
+    result = dict()
+    for theme in quiz_game.quiz.q_category.filter(round=round):
+        result[theme.name] = [{"id": q.id, "text": q.text, "value": q.value, "type": q.type_id,
+                               "audio": q.audio.url if q.audio else None,
+                               "image": q.image.url if q.image else None,
+                               "fresh": q.fresh} for q in
+                              theme.question.all().order_by('value')]
+    return result
+
+
+async def round_qg(quiz_game_id: int, round: int) -> Coroutine:
+    return await sync_to_async(_round_qg)(quiz_game_id, round)
+
+
+def _r_completed(quiz_game_id: int, round: int) -> dict:
+    quiz_game = QuizGame.objects.prefetch_related('quiz', 'quiz__q_category', 'quiz__q_category__question').get(
+        id=quiz_game_id)
+    result = False
+    for theme in quiz_game.quiz.q_category.filter(round=round):
+        for q in theme.question.all():
+            if q.fresh:
+                result = True
+                return {"alive": result}
+    quiz_game.current_round += 1
+    quiz_game.save(update_fields=['current_round'])
+    return {"alive": result}
+
+
+async def r_completed(quiz_game_id: int, round: int) -> Coroutine:
+    return await sync_to_async(_r_completed)(quiz_game_id, round)
+
+
+def _corr_ans(data: dict) -> None:
+    player = Participant.objects.get(user_id=data['player_id'], active=True)
+    question = InGameQuestion.objects.prefetch_related('category').get(id=data['question_id'])
+    points = question.category.round * question.value
+    player.score += points
+    player.answer_attempts += 1
+    player.correct_answers += 1
+    question.fresh = False
+    player.save(update_fields=['score', 'answer_attempts', 'correct_answers'])
+    question.save(update_fields=['fresh'])
+
+
+async def corr_ans(data: dict) -> Coroutine:
+    return await sync_to_async(_corr_ans)(data)
+
+
+def _wrong_ans(data: dict) -> None:
+    player = Participant.objects.get(user_id=data['player_id'], active=True)
+    question = InGameQuestion.objects.prefetch_related('category').get(id=data['question_id'])
+    points = question.category.round * question.value
+    player.score -= points
+    player.answer_attempts += 1
+    player.save(update_fields=['score', 'answer_attempts'])
+
+
+async def wrong_ans(data: dict) -> Coroutine:
+    return await sync_to_async(_wrong_ans)(data)
+
+
+def _super_corr_ans(data: dict) -> None:
+    player = Participant.objects.get(id=data['player_id'], active=True)
+    player.score += player.super_bet
+    player.answer_attempts += 1
+    player.correct_answers += 1
+    player.save(update_fields=['score', 'answer_attempts', 'correct_answers'])
+
+
+async def super_corr_ans(data: dict) -> Coroutine:
+    return await sync_to_async(_super_corr_ans)(data)
+
+
+def _super_wrong_ans(data: dict) -> None:
+    player = Participant.objects.get(id=data['player_id'], active=True)
+    player.score -= player.super_bet
+    player.answer_attempts += 1
+    player.save(update_fields=['score', 'answer_attempts'])
+
+
+async def super_wrong_ans(data: dict) -> Coroutine:
+    return await sync_to_async(_super_wrong_ans)(data)
+
+
+def _game_start(data: dict) -> None:
+    game = QuizGame.objects.get(id=data['game_id'])
+    game.started = True
+    game.save(update_fields=['started'])
+
+
+async def game_start(data: dict) -> Coroutine:
+    return await sync_to_async(_game_start)(data)
+
+
+def _score_pl(request: HttpRequest) -> dict:
+    quiz_game_id = request.GET.get('quiz_game_id')
+    game = QuizGame.objects.get(id=quiz_game_id)
+    participant = Participant.objects.get(user=request.user, active=True)
+    return {"score": participant.score, "round": game.current_round}
+
+
+async def score_pl(request: HttpRequest) -> Coroutine:
+    return await sync_to_async(_score_pl)(request)
+
+
+def _dashboard(quiz_game_id: int) -> list:
+    quiz_game = QuizGame.objects.prefetch_related('participants', 'participants__user').get(id=quiz_game_id)
+    return [{"id": p.id, "name": p.user.username, "score": p.score} for p in
+            quiz_game.participants.all().order_by('-score')]
+
+
+async def dashboard(quiz_game_id: int) -> Coroutine:
+    return await sync_to_async(_dashboard)(quiz_game_id)
+
+
+def _get_ans(quiz_game_id: int, q_id: int) -> dict:
+    question = InGameQuestion.objects.get(id=q_id)
+    quiz_game = QuizGame.objects.prefetch_related('participants', 'participants__user').get(id=quiz_game_id)
+    result = list()
+    for p in quiz_game.participants.all().order_by('-score'):
+        if not p.super_bet or not p.super_answer:
+            return {"ready": False}
+    question.save(update_fields=['fresh'])
+    return {"answers": result, "ready": True}
+
+
+async def get_ans(quiz_game_id: int, q_id: int) -> Coroutine:
+    return await sync_to_async(_get_ans)(quiz_game_id, q_id)
+
+
+def _g_list() -> list:
+    return [{"id": g.id, "name": g.name, "room": g.room_name} for g in QuizGame.objects.filter(started=False)]
+
+
+async def g_list() -> Coroutine:
+    return await sync_to_async(_g_list)()
+
+
+def _connect_player(request: HttpRequest) -> None:
+    data = json.loads(request.body)
+    game = QuizGame.objects.get(id=data['game_id'])
+    if not Participant.objects.filter(user=request.user, game=game, active=True).exists():
+        Participant.objects.create(user=request.user, game=game)
+
+
+async def connect_player(request: HttpRequest) -> Coroutine:
+    return await sync_to_async(_connect_player)(request)
+
+
+def _bet(request: HttpRequest) -> None:
+    data = json.loads(request.body)
+    participant = Participant.objects.get(user=request.user, active=True)
+    participant.super_bet = data["bet"]
+    participant.save(update_fields=['super_bet'])
+
+
+async def bet(request: HttpRequest) -> Coroutine:
+    return await sync_to_async(_bet)(request)
+
+
+def _super_ans(request: HttpRequest) -> None:
+    data = json.loads(request.body)
+    participant = Participant.objects.get(user=request.user, active=True)
+    participant.super_answer = data["answer"]
+    participant.save(update_fields=['super_answer'])
+
+
+async def super_ans(request: HttpRequest) -> Coroutine:
+    return await sync_to_async(_super_ans)(request)
+
+
+def _res_table(game_id: int) -> list:
+    quiz_game = QuizGame.objects.prefetch_related('participants', 'participants__user').get(id=game_id)
+    result = list()
+    for p in quiz_game.participants.all().order_by('-score'):
+        percent = p.correct_answers / p.answer_attempts * 100
+        result.append({"id": p.id, "name": p.user.username, "score": p.score,
+                       "percent": f'{int(percent)} %'})
+    return result
+
+
+async def res_table(game_id: int) -> Coroutine:
+    return await sync_to_async(_res_table)(game_id)
+
+
+def _game_end(data: dict) -> None:
+    game = QuizGame.objects.prefetch_related('participants', 'quiz').get(id=data["game_id"])
+    q_set = game.participants.all()
+    for p in q_set:
+        p.active = False
+    Participant.objects.bulk_update(q_set, ['active'])
+    game.quiz.delete()
+
+
+async def game_end(data: dict) -> Coroutine:
+    return await sync_to_async(_game_end)(data)
+
+
+def _no_body(question_id: int) -> None:
+    question = InGameQuestion.objects.get(id=question_id)
+    question.fresh = False
+    question.save(update_fields=['fresh'])
+
+
+async def no_body(question_id: int) -> Coroutine:
+    return await sync_to_async(_no_body)(question_id)
+
+
+def _q_detail(question_id: int) -> dict:
+    question = Question.objects.select_related('type').get(id=question_id)
+    return {"text": question.text, "type": question.type.id}
+
+
+async def q_detail(question_id: int) -> Coroutine:
+    return await sync_to_async(_q_detail)(question_id)
+
+
+def _th_detail(theme_id: int) -> dict:
+    theme = QuestionCategory.objects.get(id=theme_id)
+    return {"name": theme.name}
+
+
+async def th_detail(theme_id: int) -> Coroutine:
+    return await sync_to_async(_th_detail)(theme_id)
+
+
+def _quiz_det(quiz_id: int) -> dict:
+    quiz = Quiz.objects.select_related('section').get(id=quiz_id)
+    return {"title": quiz.title, "section": quiz.section.id}
+
+
+async def quiz_det(quiz_id: int) -> Coroutine:
+    return await sync_to_async(_quiz_det)(quiz_id)
+
+
+def _check_room(request: HttpRequest) -> dict:
+    role = request.GET.get('role')
+    if role == 'creator':
+        game = QuizGame.objects.get(game_master=request.user)
+        return {"room": game.room_name}
+    else:
+        player = Participant.objects.get(user=request.user, active=True)
+        return {"room": player.game.room_name}
+
+
+async def check_room(request: HttpRequest) -> Coroutine:
+    return await sync_to_async(_check_room)(request)
+
+
+def _get_types() -> dict:
+    return {"types": [[type.id, type.name] for type in QuestionType.objects.all()]}
+
+
+async def get_types() -> Coroutine:
+    return await sync_to_async(_get_types)()

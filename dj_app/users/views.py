@@ -1,8 +1,9 @@
 import json
 
-from django.contrib.auth import login, logout, authenticate
-from django.http import HttpResponse
+from django.contrib.auth import login, logout
+from django.http import HttpResponse, HttpRequest
 
+from users.asgi_methods import check_mail, check_pwd, player_login, player_logout, player_register, check_log
 from users.models import CustomUser
 
 
@@ -11,34 +12,29 @@ def check_method(method: str, expected: list) -> HttpResponse:
         return HttpResponse(status=405)
 
 
-def user_login(request):
+async def user_login(request: HttpRequest) -> HttpResponse:
     check_method(request.method, ['POST'])
     data = json.loads(request.body)
-    if not CustomUser.objects.filter(email=data['email']).exists():
+    if not await check_mail(data['email']):
         return HttpResponse(json.dumps({"detail": "Wrong email address"}), status=400, content_type='application/json')
-    user = CustomUser.objects.get(email=data['email'])
-    if not user.check_password(data['password']):
+    if not await check_pwd(data['password'], data['email']):
         return HttpResponse(json.dumps({"detail": "Wrong password"}), status=400, content_type='application/json')
-    login(request=request, user=user)
+    await player_login(request, data['email'])
     return HttpResponse(json.dumps({"detail": "Successfully logged in"}), status=200, content_type='application/json')
 
 
-def user_logout(request):
+async def user_logout(request: HttpRequest) -> HttpResponse:
     check_method(request.method, ['POST'])
-    logout(request)
+    await player_logout(request)
     return HttpResponse(json.dumps({"detail": "Successfully logged out"}), status=200, content_type='application/json')
 
 
-def user_register(request):
+async def user_register(request: HttpRequest) -> HttpResponse:
     check_method(request.method, ['POST'])
-    data = json.loads(request.body)
-    user = CustomUser.objects.create_user(email=data['email'], password=data['password'], username=data['username'])
-    login(request=request, user=user)
+    await  player_register(request)
     return HttpResponse(json.dumps({"detail": "Successfully created"}), status=201, content_type='application/json')
 
 
-def check_logged(request):
+async def check_logged(request: HttpRequest) -> HttpResponse:
     check_method(request.method, ['GET'])
-    return HttpResponse(json.dumps({"logged": request.user.is_authenticated,
-                                    "username": request.user.username if request.user.is_authenticated else None}),
-                                    status=200, content_type='application/json')
+    return HttpResponse(json.dumps(await check_log(request)), status=200, content_type='application/json')

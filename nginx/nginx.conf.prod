@@ -1,14 +1,57 @@
 server {
     listen 80;
 
-    server_name quiz-game.com;
+    server_name 192.168.50.233;
+    
+    client_max_body_size 10M;
 
     location / {
         proxy_pass http://frontend:3000;
+        #socket settings
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
     }
 
     location /api {
         proxy_pass http://backend:3001;
         rewrite ^/api/(.*) /$1 break;
+    }
+
+    location /ws {
+        proxy_pass http://backend:3001/ws;
+        rewrite ^/api/(.*) /$1 break;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+server {
+    listen 80;
+
+    server_name quiz-game.local;
+    
+    client_max_body_size 10M;
+
+    location / {
+        proxy_pass http://frontend:3000;
+        #socket settings
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    location /api {
+        proxy_pass http://backend:3001;
+        rewrite ^/api/(.*) /$1 break;
+    }
+
+    location /ws {
+        proxy_pass http://backend:3001/ws;
+        rewrite ^/api/(.*) /$1 break;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
     }
 }
