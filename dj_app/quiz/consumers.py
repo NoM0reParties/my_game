@@ -9,7 +9,6 @@ from users.models import CustomUser
 
 class GameRoomConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        print('yo')
         self.gamename = self.scope['url_route']['kwargs']['gamename']
         self.game_group_name = f'game_{self.gamename}'
         await self.channel_layer.group_add(
@@ -36,7 +35,7 @@ class GameRoomConsumer(AsyncWebsocketConsumer):
                 self.game_group_name,
                 {
                     'type': 'unlock_buttons',
-                    'message': 'unlock'
+                    'message': 'unlocked'
                 }
             )
         elif message == 'update':
@@ -44,7 +43,7 @@ class GameRoomConsumer(AsyncWebsocketConsumer):
                 self.game_group_name,
                 {
                     'type': 'update_buttons',
-                    'message': 'update'
+                    'message': 'updated'
                 }
             )
 
@@ -71,7 +70,6 @@ class GameRoomConsumer(AsyncWebsocketConsumer):
 
 
     async def disconnect(self, close_code):
-        print('yoo')
         await self.channel_layer.group_discard(
             self.game_group_name,
             self.channel_name

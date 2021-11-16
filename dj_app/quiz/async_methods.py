@@ -405,6 +405,8 @@ def _get_ans(quiz_game_id: int, q_id: int) -> dict:
     for p in quiz_game.participants.all().order_by('-score'):
         if not p.super_bet or not p.super_answer:
             return {"ready": False}
+        result.append({"id": p.id, "name": p.user.username, "bet": p.super_bet, "answer": p.super_answer})
+    question.fresh = False
     question.save(update_fields=['fresh'])
     return {"answers": result, "ready": True}
 
