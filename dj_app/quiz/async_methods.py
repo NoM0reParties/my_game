@@ -141,8 +141,8 @@ async def question_cr(request: HttpRequest) -> Coroutine:
     return await sync_to_async(_question_cr)(request)
 
 
-def _quiz_upd(request: HttpRequest) -> None:
-    quiz = Quiz.objects.get(id=id)
+def _quiz_upd(request: HttpRequest, quiz_id: int) -> None:
+    quiz = Quiz.objects.get(id=quiz_id)
     update_fields = list()
     if request.method == 'PUT':
         data = json.loads(request.body)
@@ -157,12 +157,12 @@ def _quiz_upd(request: HttpRequest) -> None:
         quiz.delete()
 
 
-async def quiz_upd(request: HttpRequest) -> Coroutine:
-    return await sync_to_async(_quiz_upd)(request)
+async def quiz_upd(request: HttpRequest, quiz_id: int) -> Coroutine:
+    return await sync_to_async(_quiz_upd)(request, quiz_id)
 
 
-def _theme_upd(request: HttpRequest, id: int) -> None:
-    theme = QuestionCategory.objects.get(id=id)
+def _theme_upd(request: HttpRequest, theme_id: int) -> None:
+    theme = QuestionCategory.objects.get(id=theme_id)
     update_fields = list()
     if request.method == 'PUT':
         data = json.loads(request.body)
@@ -174,12 +174,12 @@ def _theme_upd(request: HttpRequest, id: int) -> None:
         theme.delete()
 
 
-async def theme_upd(request: HttpRequest, id: int) -> Coroutine:
-    return await sync_to_async(_theme_upd)(request, id)
+async def theme_upd(request: HttpRequest, theme_id: int) -> Coroutine:
+    return await sync_to_async(_theme_upd)(request, theme_id)
 
 
-def _question_upd(request: HttpRequest, id: int) -> None:
-    question = Question.objects.get(id=id)
+def _question_upd(request: HttpRequest, question_id: int) -> None:
+    question = Question.objects.get(id=question_id)
     update_fields = list()
     if request.method == 'POST':
         print(request.POST)
@@ -200,8 +200,8 @@ def _question_upd(request: HttpRequest, id: int) -> None:
         question.delete()
 
 
-async def question_upd(request: HttpRequest, id: int) -> Coroutine:
-    return await sync_to_async(_question_upd)(request, id)
+async def question_upd(request: HttpRequest, question_id: int) -> Coroutine:
+    return await sync_to_async(_question_upd)(request, question_id)
 
 
 def _round_change(data: dict) -> None:

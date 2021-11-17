@@ -1,10 +1,9 @@
 import json
+from asyncio import gather
 
-from django.contrib.auth import login, logout
 from django.http import HttpResponse, HttpRequest
 
 from users.asgi_methods import check_mail, check_pwd, player_login, player_logout, player_register, check_log
-from users.models import CustomUser
 
 
 def check_method(method: str, expected: list) -> HttpResponse:
@@ -15,11 +14,12 @@ def check_method(method: str, expected: list) -> HttpResponse:
 async def user_login(request: HttpRequest) -> HttpResponse:
     check_method(request.method, ['POST'])
     data = json.loads(request.body)
-    if not await check_mail(data['email']):
+    info = await gather(check_mail(data['email']), check_pwd(data['password'], data['email']),
+                        player_login(request, data['email']))
+    if not await info[0]:
         return HttpResponse(json.dumps({"detail": "Wrong email address"}), status=400, content_type='application/json')
-    if not await check_pwd(data['password'], data['email']):
+    if not info[1]:
         return HttpResponse(json.dumps({"detail": "Wrong password"}), status=400, content_type='application/json')
-    await player_login(request, data['email'])
     return HttpResponse(json.dumps({"detail": "Successfully logged in"}), status=200, content_type='application/json')
 
 
