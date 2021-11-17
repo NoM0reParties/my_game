@@ -16,7 +16,7 @@ async def user_login(request: HttpRequest) -> HttpResponse:
     data = json.loads(request.body)
     info = await gather(check_mail(data['email']), check_pwd(data['password'], data['email']),
                         player_login(request, data['email']))
-    if not await info[0]:
+    if not info[0]:
         return HttpResponse(json.dumps({"detail": "Wrong email address"}), status=400, content_type='application/json')
     if not info[1]:
         return HttpResponse(json.dumps({"detail": "Wrong password"}), status=400, content_type='application/json')
