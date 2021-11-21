@@ -1,4 +1,6 @@
 import json
+import random
+import string
 from typing import Coroutine
 
 from asgiref.sync import sync_to_async
@@ -6,6 +8,19 @@ from django.contrib.auth.models import User
 from django.http import HttpRequest
 
 from quiz.models import Section, Quiz, QuestionCategory, Question, InGameQuestion, QuizGame, Participant, QuestionType
+
+
+def get_code(length):
+    code = ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+    return code
+
+
+def _get_player(request: HttpRequest) -> dict:
+    return {"id": request.user.id}
+
+
+async def get_player(request: HttpRequest) -> Coroutine:
+    return await sync_to_async(_get_player)(request)
 
 
 def _get_user(request: HttpRequest) -> User:
@@ -223,7 +238,7 @@ def _g_quiz_cr(request: HttpRequest) -> dict:
     data = json.loads(request.body)
     prototype_quiz = Quiz.objects.prefetch_related('q_category', 'q_category__question').get(id=data['data_id'])
     new_quiz = Quiz.objects.create(title=prototype_quiz.title, section=prototype_quiz.section, completed=True)
-    new_quiz_game = QuizGame.objects.create(name=data['game_name'], quiz=new_quiz, game_master=request.user)
+    new_quiz_game = QuizGame.objects.create(name=data['game_name'], quiz=new_quiz, game_master=request.user, room_name=get_code(15))
     themes = list()
     questions = list()
     for theme in prototype_quiz.q_category.all():

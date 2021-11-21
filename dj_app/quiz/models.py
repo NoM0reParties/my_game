@@ -1,14 +1,7 @@
-import random
-import string
-
 from django.db import models
 
 from users.models import CustomUser
 
-
-def get_code(length):
-    code = ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
-    return code
 
 class Section(models.Model):
     name = models.CharField(max_length=64, verbose_name='название тематической секции')

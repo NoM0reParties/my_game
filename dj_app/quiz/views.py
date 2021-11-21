@@ -7,7 +7,8 @@ from quiz.async_methods import check_user_auth, get_sections, get_quiz_list, get
     get_question_list, get_theme_round, get_question_detail, get_ig_question_detail, quiz_cr, theme_cr, question_cr, \
     quiz_upd, theme_upd, question_upd, round_change, g_quiz_cr, qg_players, round_arrange, round_qg, corr_ans, \
     r_completed, wrong_ans, super_corr_ans, super_wrong_ans, game_start, score_pl, dashboard, get_ans, g_list, \
-    connect_player, bet, super_ans, res_table, game_end, no_body, q_detail, th_detail, quiz_det, check_room, get_types
+    connect_player, bet, super_ans, res_table, game_end, no_body, q_detail, th_detail, quiz_det, check_room, get_types, \
+    get_player
 
 
 async def check_method(request: HttpRequest, expected: list) -> HttpResponse:
@@ -20,6 +21,10 @@ async def check_method(request: HttpRequest, expected: list) -> HttpResponse:
 async def sections(request: HttpRequest):
     info = await gather(check_method(request, ['GET']), get_sections())
     return JsonResponse(info[1])
+
+
+async def player_id(request: HttpRequest):
+    return JsonResponse(await get_player(request))
 
 
 async def types(request: HttpRequest):

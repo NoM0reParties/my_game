@@ -3,6 +3,7 @@ from django.urls import path
 from quiz import views
 
 urlpatterns = [
+    path('player_id', views.player_id, name='player_id'),
     path('sections', views.sections, name='sections'),
     path('types', views.types, name='types'),
     path('quiz_list', views.quiz_list, name='quiz_list'),
